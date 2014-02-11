@@ -11,6 +11,7 @@ namespace CSharp.Examples
     {
         public void Test()
         {
+            var conn = Db.Open();
             var myapp = new Db.app();
             myapp.AppId = 1;
         }

@@ -61,6 +61,7 @@
   <ItemGroup>
     <Compile Include="MsSqlServer.fs" />
     <Compile Include="MicroORMAssembly.fs" />
+    <Compile Include="ProvidedTypes.fs" />
     <Compile Include="MicroORMTypeProvider.fs" />
     <None Include="Script.fsx" />
     <None Include="packages.config" />

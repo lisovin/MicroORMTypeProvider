@@ -78,17 +78,15 @@ module internal MicroORMAssembly =
                     newobj (Constructor Methods.System.Data.SqlClient.SqlConnection.``new : string -> System.Data.SqlClient.SqlConnection``)
                     ret
                 }
+            }
+            for t in tables do
+                do! publicType t.TableName {
+                    do! publicDefaultEmptyConstructor
 
-                for t in tables do
-                    do! nestedPublicType t.TableName {
-                        do! publicDefaultEmptyConstructor
-
-                        for c in t.Columns do
-                            let propType = fromDataType c.DataType c.IsNullable
-                            let columnName = toPropertyStyle propertyStyle c.ColumnName
-                            do! publicAutoPropertyOfType propType columnName { get; set; }
-                    }
-
+                    for c in t.Columns do
+                        let propType = fromDataType c.DataType c.IsNullable
+                        let columnName = toPropertyStyle propertyStyle c.ColumnName
+                        do! publicAutoPropertyOfType propType columnName { get; set; }
                 }
         } |> saveAssembly
         
