@@ -17,6 +17,12 @@ type PropertyStyle =
 
 type internal Methods = Reflected<"System.Data">
 
+module Database = 
+    let openConnection connectionString =
+        let conn = new SqlConnection(connectionString) 
+        conn.Open()
+        conn
+
 module internal MicroORMAssembly = 
     let fromDataType dataType isNullable = 
         let clrType = 
@@ -55,32 +61,35 @@ module internal MicroORMAssembly =
         then typeof<Nullable<_>>.GetGenericTypeDefinition().MakeGenericType([|clrType|])
         else clrType
 
-    let toPropertyStyle propertyStyle columnName = 
-        let toPascal (name : string) = 
-            let name = name.ToLower().Replace("_", " ")
-            let info = CultureInfo.CurrentCulture.TextInfo
-            let name = info.ToTitleCase(name).Replace(" ", String.Empty)
-            name
+    let toPascal (name : string) = 
+        let name = name.ToLower().Replace("_", " ")
+        let info = CultureInfo.CurrentCulture.TextInfo
+        let name = info.ToTitleCase(name).Replace(" ", String.Empty)
+        name
 
+    let toPropertyStyle propertyStyle columnName = 
         match propertyStyle with
         | PropertyStyle.Pascal -> toPascal columnName
         | _ -> columnName
 
-    let createAssembly(rootTypeName, connectionString, propertyStyle) = 
-        // printfn "--->create assembly: %s" connectionString
+    let toTableName tableName = 
+        toPascal tableName
+
+    let createAssembly(connectionString, propertyStyle) = 
         let assemblyPath = Path.ChangeExtension(Path.GetTempFileName(), ".dll")
         let db = MsSqlServer(connectionString)
         let tables = db.Tables
         assembly assemblyPath {
-            do! publicType rootTypeName {
-                do! publicStaticMethod<SqlConnection> "Open" [] {
+(*            do! publicType "Db" {
+                do! publicMethod<string> "Open" [] {
                     ldstr connectionString
-                    newobj (Constructor Methods.System.Data.SqlClient.SqlConnection.``new : string -> System.Data.SqlClient.SqlConnection``)
                     ret
                 }
             }
+            *)
             for t in tables do
-                do! publicType t.TableName {
+                let tableName = toTableName t.TableName
+                do! publicType tableName {
                     do! publicDefaultEmptyConstructor
 
                     for c in t.Columns do

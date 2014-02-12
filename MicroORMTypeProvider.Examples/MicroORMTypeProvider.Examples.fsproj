@@ -50,9 +50,8 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="Example1.fs" />
-    <None Include="EntityFramework.fsx" />
     <None Include="packages.config" />
-    <None Include="Example1.fsx" />
+    <None Include="Dapper.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Dapper">
