@@ -2179,6 +2179,7 @@ type TypeProviderForNamespaces(namespacesAndTypes : list<(string * list<Provided
 #else
     abstract member ResolveAssembly : args : System.ResolveEventArgs -> Assembly
     default this.ResolveAssembly(args) = 
+        printfn "--->tryong to ResolveAssembly %A" args
         let expectedName = (AssemblyName(args.Name)).Name + ".dll"
         let expectedLocationOpt = 
             probingFolders 

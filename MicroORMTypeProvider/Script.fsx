@@ -1,47 +1,45 @@
 ﻿#r "System.Transactions"
-#r @"..\packages\Dapper.1.12.1\lib\net40\Dapper.dll"
-#r @"..\packages\DapperExtensions.1.4.3\lib\net40\DapperExtensions.dll"
 
 open System
 open System.Collections.Generic
 open System.Data.SqlClient
 
-open Dapper
-open DapperExtensions
-
-type App() = 
-    member val AppId = 0 with get, set
-    member val Name = "" with get, set
-    member val Icon = "" with get, set
-
-type Table() = 
-    member val table_catalog = "" with get, set
-    member val table_schema = "" with get, set
-    member val table_name = "" with get, set
+let tableSql = """
+select 
+    t.table_name, 
+    c.column_name, 
+    c.is_nullable, 
+    c.data_type, 
+    isnull(objectproperty(object_id(k.constraint_name), 'IsPrimaryKey'), 0) is_primary_key_part
+from information_schema.tables t
+inner join information_schema.columns c on t.TABLE_NAME = c.TABLE_NAME
+left join information_schema.key_column_usage k on k.table_name = t.table_name and k.column_name = c.column_name
+    """
 
 let test() = 
     use conn = new SqlConnection(@"Data Source=(localdb)\v11.0;Initial Catalog=wiztiles;Integrated Security=True")
     conn.Open()
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- "select * from app"
+    cmd.CommandText <- tableSql
     use reader = cmd.ExecuteReader()
     seq {
         while (reader.Read()) do
-            yield App(AppId = (reader.["app_id"] :?> int), 
-                      Name = (reader.["name"] :?> string))
+            yield reader.["column_name"], reader.["is_primary_key_part"]
     } |> Seq.toArray
 
-test()
+let rs = test()
+
+let p1 = rs.[0] |> snd
+let p2 = rs.[1] |> snd
+p2.GetType().FullName
+
+p1 :?> Nullable<int>
+p2 :?> Nullable<int>
+
+p1 :? int
+p2 :? int
+
+p2 ?= 1
     //conn.Get<App>(1)
 
 
-let conn = new SqlConnection(@"Data Source=(localdb)\v11.0;Initial Catalog=wiztiles;Integrated Security=True")
-conn.Open()
-let app = conn.Query<App>("select * from app") |> Seq.head
-app.App_Id
-let rs = conn.Query<Table>("SELECT * FROM information_schema.tables") |> Seq.toArray
-rs.[0].table_name
-
-
-apps
-----

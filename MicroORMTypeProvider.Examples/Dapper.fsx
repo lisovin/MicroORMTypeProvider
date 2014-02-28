@@ -1,7 +1,6 @@
 ﻿#r @"..\MicroORMTypeProvider\bin\Debug\ReflectionTypeProvider.dll"
 #r @"..\MicroORMTypeProvider\bin\Debug\MicroORMTypeProvider.dll"
 #r @"..\packages\Dapper.1.13\lib\net40\Dapper.dll"
-#r @"..\packages\DapperExtensions.1.4.3\lib\net40\DapperExtensions.dll"
 #r "System.Data"
 #r "System.Transactions"
 open System
@@ -10,13 +9,43 @@ open System.Text.RegularExpressions
 
 open MicroORMTypeProvider
 open Dapper
-open DapperExtensions
-open DapperExtensions.Mapper
 open Microsoft.FSharp.Linq.RuntimeHelpers.LeafExpressionConverter
 
 let [<Literal>] connectionString = @"Data Source=(localdb)\v11.0;Initial Catalog=wiztiles;Integrated Security=True"
 
 type Db = MicroORM<connectionString>
+
+let app = Db.App()
+app.Icon <- "/icon.png"
+app.Name <- "MyApp 8"
+app.Uri<- "/my/app"
+
+let conn = Db.Open()
+
+
+app.Insert(conn)
+
+
+
+app.GetType().Assembly.Location
+
+app.AppId <- 7
+app.Icon <- "/icon.png 2" 
+app.Name <- "MyApp 3"
+app.Uri<- "/my/app 2"
+
+app.Update(conn)
+
+app.Delete(conn)
+
+
+
+typeof<Db.App>.AssemblyQualifiedName
+typeof<Db.App>.GetMethods(System.Reflection.BindingFlags.Static) |> Array.filter (fun mi -> mi.Name = "Insert")
+let app = (Db.App())
+Db.App.App.Insert(Db.App.App())
+
+Db.App.Insert(Db.App())
 
 let toPascal (name : string) = 
     let name = name.ToLower().Replace("_", " ")
@@ -45,10 +74,13 @@ SqlMapper.SetTypeMap(
     typeof<Db.App>,
     CustomPropertyTypeMap(
         typeof<Db.App>, 
-        fun ty columnName -> ty.GetProperty(toPascal columnName)))
+        fun ty columnName -> 
+            printfn "--->sqlmapper: %s %s %A"  columnName (toPascal columnName) (ty.GetProperty(toPascal columnName))
+            ty.GetProperty(toPascal columnName)))
 
 let conn = Db.Open()
 conn.GetList<Db.App>()
+conn.Query<Db.App>("select * from app")
 conn.GetList<Db.Tile>() |> Seq.toArray
 let app = conn.Get<Db.App>(1)
 app.Icon <- app.Icon + "_modified"

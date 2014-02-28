@@ -36,7 +36,7 @@ type MicroORMTypeProvider(cfg : TypeProviderConfig) as this =
         let ty = ProvidedTypeDefinition(assembly, ns, typeName, Some typeof<obj>, IsErased = false, HideObjectMethods = true)
         ty.AddMembers(generatedAssembly.GetExportedTypes() |> Seq.toList)
 
-        let openCode args = <@@ Database.openConnection connectionString @@>
+        let openCode args = <@@ Database.OpenConnection connectionString @@>
         let openMethod = ProvidedMethod("Open", [], typeof<SqlConnection>, IsStaticMethod = true, InvokeCode = openCode)
 
         ty.AddMembers([openMethod])
@@ -46,5 +46,6 @@ type MicroORMTypeProvider(cfg : TypeProviderConfig) as this =
         ty
 
 
-    do containerType.DefineStaticParameters(parameters, buildAssembly)
+    do base.RegisterRuntimeAssemblyLocationAsProbingFolder(cfg)
+       containerType.DefineStaticParameters(parameters, buildAssembly)
        this.AddNamespace(ns, [containerType])
