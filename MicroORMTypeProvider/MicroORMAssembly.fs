@@ -134,6 +134,58 @@ module internal MicroORMAssembly =
         let where = keyColumnNames |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString " and "
         sprintf "update [%s] set %s where %s" tableName updates where
         
+    let deleteSql tableName keyColumnNames = 
+        let where = keyColumnNames |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString " and "
+        sprintf "delete [%s] where %s" tableName where
+
+    let emitExecuteSql sql columnNames values = 
+        il {
+            // let cmd = conn.CreateCommand()
+            let! result = IL.declareLocal<int>()
+            let! cmd = IL.declareLocal<System.Data.Common.DbCommand>()
+            do! IL.ldarg_1
+            do! IL.callvirt Methods.System.Data.SqlClient.SqlConnection.``CreateCommand : unit -> System.Data.Common.DbCommand``
+            do! IL.stloc cmd
+
+            // .try {
+            let! try' = IL.beginExceptionBlock
+            // cmd.CommandText <- "insert ...."
+            do! IL.ldloc cmd
+            do! IL.ldstr sql
+            do! IL.dup
+            do! IL.call Methods.System.Console.``Write : string -> unit``
+            do! IL.callvirt Methods.System.Data.Common.DbCommand.``set_CommandText : string -> unit``
+
+            // cmd.Parameters
+            do! IL.ldloc cmd
+            do! IL.callvirt Methods.System.Data.SqlClient.SqlCommand.``get_Parameters : unit -> System.Data.Common.DbParameterCollection``
+                        
+            for cn, v : IKVM.Reflection.Emit.PropertyBuilder in (columnNames, values) ||> List.zip do
+                do! IL.dup
+                do! IL.ldstr cn
+                do! IL.ldarg_0
+                do! IL.callvirt (v.GetGetMethod())
+                do! IL.box v.PropertyType
+                //do! IL.ldstr "foo"
+                do! IL.callvirt Methods.System.Data.SqlClient.SqlParameterCollection.``AddWithValue : string*obj -> System.Data.SqlClient.SqlParameter``
+                do! IL.pop
+
+            do! IL.pop
+
+            do! IL.ldloc cmd
+            do! IL.callvirt Methods.System.Data.Common.DbCommand.``ExecuteNonQuery : unit -> int``
+            do! IL.stloc result
+            // } finally {
+            do! IL.beginFinally
+            do! IL.ldloc cmd
+            do! IL.callvirt Methods.System.IDisposable.``Dispose : unit -> unit``
+            //do! IL.en
+            do! IL.endExceptionBlock
+                        
+            do! IL.ldloc result
+            do! IL.ret
+        }
+
     let createAssembly(connectionString, propertyStyle) = 
         let assemblyPath = Path.ChangeExtension(Path.GetTempFileName(), ".dll")
         let db = MsSqlServer(connectionString)
@@ -164,104 +216,20 @@ module internal MicroORMAssembly =
                              modValues := prop :: !modValues
 
                     yield! publicMethodOfType (ClrType typeof<int>) "Insert" [ClrType typeof<SqlConnection>] {
-                        // let cmd = conn.CreateCommand()
-                        let! result = IL.declareLocal<int>()
-                        let! cmd = IL.declareLocal<System.Data.Common.DbCommand>()
-                        do! IL.ldarg_1
-                        do! IL.callvirt Methods.System.Data.SqlClient.SqlConnection.``CreateCommand : unit -> System.Data.Common.DbCommand``
-                        do! IL.stloc cmd
-
-                        // .try {
-                        let! try' = IL.beginExceptionBlock
-                        // cmd.CommandText <- "insert ...."
-                        do! IL.ldloc cmd
                         let sql = insertSql t.TableName (!modColumnNames |> Seq.toArray)
-                        do! IL.ldstr sql
-                        do! IL.callvirt Methods.System.Data.Common.DbCommand.``set_CommandText : string -> unit``
-
-                        // cmd.Parameters
-                        do! IL.ldloc cmd
-                        do! IL.callvirt Methods.System.Data.SqlClient.SqlCommand.``get_Parameters : unit -> System.Data.Common.DbParameterCollection``
-                        
-                        for cn, v in (!modColumnNames, !modValues) ||> List.zip do
-                            do! IL.dup
-                            do! IL.ldstr cn
-                            do! IL.ldarg_0
-                            do! IL.callvirt (v.GetGetMethod())
-                            //do! IL.ldstr "foo"
-                            do! IL.callvirt Methods.System.Data.SqlClient.SqlParameterCollection.``AddWithValue : string*obj -> System.Data.SqlClient.SqlParameter``
-                            do! IL.pop
-
-                        do! IL.pop
-
-                        do! IL.ldloc cmd
-                        do! IL.callvirt Methods.System.Data.Common.DbCommand.``ExecuteNonQuery : unit -> int``
-                        do! IL.stloc result
-                        // } finally {
-                        do! IL.beginFinally
-                        do! IL.ldloc cmd
-                        do! IL.callvirt Methods.System.IDisposable.``Dispose : unit -> unit``
-                        //do! IL.en
-                        do! IL.endExceptionBlock
-                        
-                        do! IL.ldloc result
-                        do! IL.ret
+                        do! emitExecuteSql sql !modColumnNames !modValues
                     }
 
                     yield! publicMethodOfType (ClrType typeof<int>) "Update" [ClrType typeof<SqlConnection>] {
-                        // let cmd = conn.CreateCommand()
-                        let! result = IL.declareLocal<int>()
-                        let! cmd = IL.declareLocal<System.Data.Common.DbCommand>()
-                        do! IL.ldarg_1
-                        do! IL.callvirt Methods.System.Data.SqlClient.SqlConnection.``CreateCommand : unit -> System.Data.Common.DbCommand``
-                        do! IL.stloc cmd
-
-                        // .try {
-                        let! try' = IL.beginExceptionBlock
-                        // cmd.CommandText <- "insert ...."
-                        do! IL.ldloc cmd
                         let sql = updateSql t.TableName !keyColumnNames !modColumnNames
-                        do! IL.ldstr sql
-                        do! IL.callvirt Methods.System.Data.Common.DbCommand.``set_CommandText : string -> unit``
-
-                        // cmd.Parameters
-                        do! IL.ldloc cmd
-                        do! IL.callvirt Methods.System.Data.SqlClient.SqlCommand.``get_Parameters : unit -> System.Data.Common.DbParameterCollection``
-                        
                         let allColumnNames = (!keyColumnNames, !modColumnNames) ||> List.append
                         let allValues = (!keyValues, !modValues) ||> List.append
-
-                        for cn, v in (allColumnNames, allValues) ||> List.zip do
-                            do! IL.dup
-                            do! IL.ldstr cn
-                            do! IL.ldarg_0
-                            do! IL.callvirt (v.GetGetMethod())
-                            do! IL.box v.PropertyType
-
-                            //do! IL.ldstr "foo"
-                            do! IL.callvirt Methods.System.Data.SqlClient.SqlParameterCollection.``AddWithValue : string*obj -> System.Data.SqlClient.SqlParameter``
-
-                            do! IL.pop
-
-                        do! IL.pop
-
-                        do! IL.ldloc cmd
-                        do! IL.callvirt Methods.System.Data.Common.DbCommand.``ExecuteNonQuery : unit -> int``
-                        do! IL.stloc result
-                        // } finally {
-                        do! IL.beginFinally
-
-                        do! IL.ldloc cmd
-                        do! IL.callvirt Methods.System.IDisposable.``Dispose : unit -> unit``
-                        do! IL.endExceptionBlock
-                        
-                        do! IL.ldloc result
-                        do! IL.ret
+                        do! emitExecuteSql sql allColumnNames allValues
                     }
 
-                    yield! publicMethod<bool> "Delete" [ClrType typeof<IDbConnection>] {
-                        do! IL.ldc_bool true
-                        do! IL.ret
+                    yield! publicMethod<bool> "Delete" [ClrType typeof<SqlConnection>] {
+                        let sql = deleteSql t.TableName (!keyColumnNames |> Seq.toArray)
+                        do! emitExecuteSql sql !keyColumnNames !keyValues
                     }
                 }
         } |> saveAssembly assemblyPath
