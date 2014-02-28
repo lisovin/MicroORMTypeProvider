@@ -16,15 +16,16 @@ let [<Literal>] connectionString = @"Data Source=(localdb)\v11.0;Initial Catalog
 type Db = MicroORM<connectionString>
 
 let app = Db.App()
+app.AppId <- 8
 app.Icon <- "/icon.png"
-app.Name <- "MyApp 8"
+app.Name <- "MyApp 10"
 app.Uri<- "/my/app"
 
 let conn = Db.Open()
 
 
 app.Insert(conn)
-
+app.Update(conn)
 
 
 app.GetType().Assembly.Location

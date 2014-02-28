@@ -127,15 +127,20 @@ module internal MicroORMAssembly =
     let insertSql tableName columns =
         let paramNames = columns |> Array.map (fun c -> "@" + c) |> seqToString ", "
         let columnNames = columns |> seqToString ", "
-        sprintf "insert into %s (%s) values (%s)" tableName columnNames paramNames
+        sprintf "insert into [%s] (%s) values (%s)" tableName columnNames paramNames
 
+    let updateSql tableName keyColumnNames valueColumnNames = 
+        let updates = valueColumnNames |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString ", "
+        let where = keyColumnNames |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString " and "
+        sprintf "update [%s] set %s where %s" tableName updates where
+        
     let createAssembly(connectionString, propertyStyle) = 
         let assemblyPath = Path.ChangeExtension(Path.GetTempFileName(), ".dll")
         let db = MsSqlServer(connectionString)
         let tables = db.Tables
-        let insertMethod = typeof<Database>.GetMethod("Insert", [| typeof<string>; typeof<string[]>; typeof<obj[]>; typeof<SqlConnection> |])
-        let updateMethod = typeof<Database>.GetMethod("Update", [| typeof<string>; typeof<string[]>; typeof<obj[]>; typeof<string[]>; typeof<obj[]>; typeof<SqlConnection> |])
-        printfn "--->updateMethod: %A" updateMethod
+        //let insertMethod = typeof<Database>.GetMethod("Insert", [| typeof<string>; typeof<string[]>; typeof<obj[]>; typeof<SqlConnection> |])
+        //let updateMethod = typeof<Database>.GetMethod("Update", [| typeof<string>; typeof<string[]>; typeof<obj[]>; typeof<string[]>; typeof<obj[]>; typeof<SqlConnection> |])
+        //printfn "--->updateMethod: %A" updateMethod
 
         assembly {
             for t in tables do
@@ -203,18 +208,54 @@ module internal MicroORMAssembly =
                         do! IL.ret
                     }
 
-                    yield! publicMethodOfType ThisType "Update" [ClrType typeof<SqlConnection>] {
-                        // tableName arg
-                        do! IL.ldstr tableName
-                        // columns arg
-                        do! IL.emitArray !keyColumnNames
-                        do! IL.emitArrayOfValues !keyValues
-                        do! IL.emitArray !modColumnNames
-                        do! IL.emitArrayOfValues !modValues
+                    yield! publicMethodOfType (ClrType typeof<int>) "Update" [ClrType typeof<SqlConnection>] {
+                        // let cmd = conn.CreateCommand()
+                        let! result = IL.declareLocal<int>()
+                        let! cmd = IL.declareLocal<System.Data.Common.DbCommand>()
                         do! IL.ldarg_1
-                        // call Insert
-                        do! IL.call updateMethod
-                        //newobj (IkvmConstructor cons)
+                        do! IL.callvirt Methods.System.Data.SqlClient.SqlConnection.``CreateCommand : unit -> System.Data.Common.DbCommand``
+                        do! IL.stloc cmd
+
+                        // .try {
+                        let! try' = IL.beginExceptionBlock
+                        // cmd.CommandText <- "insert ...."
+                        do! IL.ldloc cmd
+                        let sql = updateSql t.TableName !keyColumnNames !modColumnNames
+                        do! IL.ldstr sql
+                        do! IL.callvirt Methods.System.Data.Common.DbCommand.``set_CommandText : string -> unit``
+
+                        // cmd.Parameters
+                        do! IL.ldloc cmd
+                        do! IL.callvirt Methods.System.Data.SqlClient.SqlCommand.``get_Parameters : unit -> System.Data.Common.DbParameterCollection``
+                        
+                        let allColumnNames = (!keyColumnNames, !modColumnNames) ||> List.append
+                        let allValues = (!keyValues, !modValues) ||> List.append
+
+                        for cn, v in (allColumnNames, allValues) ||> List.zip do
+                            do! IL.dup
+                            do! IL.ldstr cn
+                            do! IL.ldarg_0
+                            do! IL.callvirt (v.GetGetMethod())
+                            do! IL.box v.PropertyType
+
+                            //do! IL.ldstr "foo"
+                            do! IL.callvirt Methods.System.Data.SqlClient.SqlParameterCollection.``AddWithValue : string*obj -> System.Data.SqlClient.SqlParameter``
+
+                            do! IL.pop
+
+                        do! IL.pop
+
+                        do! IL.ldloc cmd
+                        do! IL.callvirt Methods.System.Data.Common.DbCommand.``ExecuteNonQuery : unit -> int``
+                        do! IL.stloc result
+                        // } finally {
+                        do! IL.beginFinally
+
+                        do! IL.ldloc cmd
+                        do! IL.callvirt Methods.System.IDisposable.``Dispose : unit -> unit``
+                        do! IL.endExceptionBlock
+                        
+                        do! IL.ldloc result
                         do! IL.ret
                     }
 
