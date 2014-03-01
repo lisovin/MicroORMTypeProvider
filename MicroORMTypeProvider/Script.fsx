@@ -4,6 +4,15 @@ open System
 open System.Collections.Generic
 open System.Data.SqlClient
 
+let sql = "insert app (name, icon) values ('asdf22', 'asd'); select @@rowcount"
+let conn = new SqlConnection(@"Data Source=(localdb)\v11.0;Initial Catalog=wiztiles;Integrated Security=True")
+conn.Open()
+let cmd = conn.CreateCommand()
+cmd.CommandText <- sql
+let r = cmd.ExecuteScalar()
+
+r :?> int
+r.GetType().FullName
 let tableSql = """
 select 
     t.table_name, 

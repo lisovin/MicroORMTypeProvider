@@ -35,11 +35,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="IKVM.Reflection">
-      <HintPath>..\packages\ILBuilder.0.1.21\lib\net40\IKVM.Reflection.dll</HintPath>
+      <HintPath>..\packages\ILBuilder.0.1.24\lib\net40\IKVM.Reflection.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="ILBuilder">
-      <HintPath>..\packages\ILBuilder.0.1.21\lib\net40\ILBuilder.dll</HintPath>
+      <HintPath>..\packages\ILBuilder.0.1.24\lib\net40\ILBuilder.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />

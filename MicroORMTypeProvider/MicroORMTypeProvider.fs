@@ -36,7 +36,12 @@ type MicroORMTypeProvider(cfg : TypeProviderConfig) as this =
         let ty = ProvidedTypeDefinition(assembly, ns, typeName, Some typeof<obj>, IsErased = false, HideObjectMethods = true)
         ty.AddMembers(generatedAssembly.GetExportedTypes() |> Seq.toList)
 
-        let openCode args = <@@ Database.OpenConnection connectionString @@>
+        let openCode args = 
+            <@@ 
+                let conn = new SqlConnection(connectionString) 
+                conn.Open()
+                conn 
+            @@>
         let openMethod = ProvidedMethod("Open", [], typeof<SqlConnection>, IsStaticMethod = true, InvokeCode = openCode)
 
         ty.AddMembers([openMethod])

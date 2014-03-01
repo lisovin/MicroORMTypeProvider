@@ -16,23 +16,28 @@ let [<Literal>] connectionString = @"Data Source=(localdb)\v11.0;Initial Catalog
 type Db = MicroORM<connectionString>
 
 let app = Db.App()
-app.AppId <- 24
-app.Icon <- "/icon.png"
-app.Name <- "MyApp 123"
-app.Uri<- "/my/app"
+app.AppId <- 48
+app.Icon <- "/icon.png/bar"
+app.Name <- sprintf "Name %d" (Random().Next(1000000))
+app.Uri<- "/my/app/1"
 
 let conn = Db.Open()
 
 
-app.Insert(conn)
+app.Name <- sprintf "Name %d" (Random().Next(1000000))
+app
 app.Update(conn)
+app.AppId <- 100
+
+
+
 app.Delete(conn)
 
 app.GetType().Assembly.Location
 
 app.AppId <- 7
 app.Icon <- "/icon.png 2" 
-app.Name <- "MyApp 3"
+app.Name <- "MyApp 3 kjh"
 app.Uri<- "/my/app 2"
 
 app.Update(conn)

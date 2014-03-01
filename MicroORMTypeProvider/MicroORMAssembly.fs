@@ -11,64 +11,13 @@ open ReflectionProvider
 
 open MicroORMTypeProvider.Databases
 
+open IKVM.Reflection.Emit
+
 type PropertyStyle = 
 | AsIs = 0
 | Pascal = 1
 
 type internal Methods = Reflected<"System.Data">
-
-type Database private () = 
-    static let seqToString sep (xs : #seq<_>) = String.Join(sep, xs)
-
-    static member OpenConnection(connectionString) =
-        let conn = new SqlConnection(connectionString) 
-        conn.Open()
-        conn
-
-    static member Insert(table : string, columns : string[], values : obj[], conn : SqlConnection) = 
-        let valueNames = columns |> Array.map (fun c -> "@" + c)
-        let columnsSql = columns |> seqToString ", "
-        let valueNamesSql = valueNames |> seqToString ", "
-        let cmdText = sprintf "insert into %s (%s) values (%s)" table columnsSql valueNamesSql
-        //printfn "--->insert sql: %s" cmdText
-        //printfn "-->insert values: %A" values
-        use cmd = conn.CreateCommand()
-        cmd.CommandText <- cmdText
-        for n, v in Array.zip columns values do
-            printfn "-->parameter: %s %A" n v
-            cmd.Parameters.AddWithValue(n, v) |> ignore
-        cmd.ExecuteNonQuery() 
-
-    static member Update(table : string, keyColumns : string[], keyValues : obj[], columns : string[], values : obj[], conn : SqlConnection) = 
-        let updates = columns |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString ", "
-        let where = keyColumns |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString " and "
-                        
-        let valueNames = columns |> Array.map (fun c -> "@" + c)
-        let cmdText = sprintf "update %s set %s where %s" table updates where
-        printfn "--->insert sql: %s" cmdText
-        //printfn "-->insert values: %A" values
-        use cmd = conn.CreateCommand()
-        cmd.CommandText <- cmdText
-        let allColumns = (keyColumns, columns) ||> Array.append
-        let allValues = (keyValues, values) ||> Array.append
-        for n, v in Array.zip allColumns allValues do
-            printfn "-->parameter: %s %A" n v
-            cmd.Parameters.AddWithValue(n, v) |> ignore
-
-        cmd.ExecuteNonQuery() 
-        (*
-    static member Delete(table : string, columns : string[], values : obj[], conn : SqlConnection) = 
-        let valueNames = columns |> Array.map (fun c -> "@" + c)
-        let cmdText = sprintf "insert into %s (%s) values (%s)" table (columns |> seqToString) (valueNames |> seqToString)
-        //printfn "--->insert sql: %s" cmdText
-        //printfn "-->insert values: %A" values
-        use cmd = conn.CreateCommand()
-        cmd.CommandText <- cmdText
-        for n, v in Array.zip columns values do
-            printfn "-->parameter: %s %A" n v
-            cmd.Parameters.AddWithValue(n, v) |> ignore
-        cmd.ExecuteNonQuery() 
-        *)
 
 module internal MicroORMAssembly = 
     let seqToString sep (xs : #seq<_>) = String.Join(sep, xs)
@@ -127,16 +76,16 @@ module internal MicroORMAssembly =
     let insertSql tableName columns =
         let paramNames = columns |> Array.map (fun c -> "@" + c) |> seqToString ", "
         let columnNames = columns |> seqToString ", "
-        sprintf "insert into [%s] (%s) values (%s)" tableName columnNames paramNames
+        sprintf "insert into [%s] (%s) values (%s); select cast (scope_identity() as int)" tableName columnNames paramNames
 
     let updateSql tableName keyColumnNames valueColumnNames = 
         let updates = valueColumnNames |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString ", "
         let where = keyColumnNames |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString " and "
-        sprintf "update [%s] set %s where %s" tableName updates where
+        sprintf "update [%s] set %s where %s; select @@rowcount" tableName updates where
         
     let deleteSql tableName keyColumnNames = 
         let where = keyColumnNames |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString " and "
-        sprintf "delete [%s] where %s" tableName where
+        sprintf "delete [%s] where %s; select @@rowcount" tableName where
 
     let emitExecuteSql sql columnNames values = 
         il {
@@ -152,8 +101,8 @@ module internal MicroORMAssembly =
             // cmd.CommandText <- "insert ...."
             do! IL.ldloc cmd
             do! IL.ldstr sql
-            do! IL.dup
-            do! IL.call Methods.System.Console.``Write : string -> unit``
+            //do! IL.dup
+            //do! IL.call Methods.System.Console.``Write : string -> unit``
             do! IL.callvirt Methods.System.Data.Common.DbCommand.``set_CommandText : string -> unit``
 
             // cmd.Parameters
@@ -173,7 +122,7 @@ module internal MicroORMAssembly =
             do! IL.pop
 
             do! IL.ldloc cmd
-            do! IL.callvirt Methods.System.Data.Common.DbCommand.``ExecuteNonQuery : unit -> int``
+            do! IL.callvirt Methods.System.Data.Common.DbCommand.``ExecuteScalar : unit -> obj``
             do! IL.stloc result
             // } finally {
             do! IL.beginFinally
@@ -183,7 +132,6 @@ module internal MicroORMAssembly =
             do! IL.endExceptionBlock
                         
             do! IL.ldloc result
-            do! IL.ret
         }
 
     let createAssembly(connectionString, propertyStyle) = 
@@ -215,21 +163,58 @@ module internal MicroORMAssembly =
                         else modColumnNames := c.ColumnName :: !modColumnNames
                              modValues := prop :: !modValues
 
-                    yield! publicMethodOfType (ClrType typeof<int>) "Insert" [ClrType typeof<SqlConnection>] {
+                    yield! publicMethodOfType ThisType "Insert" [ClrType typeof<SqlConnection>] {
                         let sql = insertSql t.TableName (!modColumnNames |> Seq.toArray)
+
+                        let! scopeIdentity = IL.declareLocal<int>()
                         do! emitExecuteSql sql !modColumnNames !modValues
+                        do! IL.stloc scopeIdentity
+                        
+                        do! IL.newobj cons
+                        // set values
+                        for (n,v) in (!modColumnNames, !modValues) ||> List.zip do
+                            do! IL.dup
+                            do! IL.ldarg_0
+                            do! IL.callvirt (v.GetGetMethod())   
+                            do! IL.callvirt (v.GetSetMethod())
+                        // set identity (assume first in the key)
+                        do! IL.dup
+                        do! IL.ldloc scopeIdentity
+                        let idProp = !keyValues |> List.head
+                        do! IL.unbox_any typeof<int32>
+                        do! IL.callvirt (idProp.GetSetMethod())
+
+                        do! IL.ret
                     }
 
-                    yield! publicMethodOfType (ClrType typeof<int>) "Update" [ClrType typeof<SqlConnection>] {
+                    yield! publicMethod<bool> "Update" [ClrType typeof<SqlConnection>] {
                         let sql = updateSql t.TableName !keyColumnNames !modColumnNames
                         let allColumnNames = (!keyColumnNames, !modColumnNames) ||> List.append
                         let allValues = (!keyValues, !modValues) ||> List.append
                         do! emitExecuteSql sql allColumnNames allValues
+                        do! IL.unbox_any typeof<int32>
+                        do! IL.ldc_i4_0
+                        
+                        do! (IL.ifThenElse IL.bne_un_s <| il {
+                            do! IL.ldc_bool false
+                        } <| il {
+                            do! IL.ldc_bool true
+                        })
+                        do! IL.ret
                     }
 
                     yield! publicMethod<bool> "Delete" [ClrType typeof<SqlConnection>] {
                         let sql = deleteSql t.TableName (!keyColumnNames |> Seq.toArray)
                         do! emitExecuteSql sql !keyColumnNames !keyValues
+                        do! IL.unbox_any typeof<int32>
+                        do! IL.ldc_i4_0
+                        
+                        do! (IL.ifThenElse IL.bne_un_s <| il {
+                            do! IL.ldc_bool false
+                        } <| il {
+                            do! IL.ldc_bool true
+                        })
+                        do! IL.ret
                     }
                 }
         } |> saveAssembly assemblyPath
