@@ -1,19 +1,88 @@
 ﻿#r @"..\MicroORMTypeProvider\bin\Debug\ReflectionTypeProvider.dll"
 #r @"..\MicroORMTypeProvider\bin\Debug\MicroORMTypeProvider.dll"
-#r @"..\packages\Dapper.1.13\lib\net40\Dapper.dll"
 #r "System.Data"
 #r "System.Transactions"
-open System
-open System.Globalization
-open System.Text.RegularExpressions
 
+open System
+open System.Data.SqlClient
 open MicroORMTypeProvider
-open Dapper
-open Microsoft.FSharp.Linq.RuntimeHelpers.LeafExpressionConverter
 
 let [<Literal>] connectionString = @"Data Source=(localdb)\v11.0;Initial Catalog=wiztiles;Integrated Security=True"
 
 type Db = MicroORM<connectionString>
+
+typeof<Db>.FullName
+
+typeof<Db>.GetMethods() |> Array.map (fun mi -> mi.Name)
+typeof<Db>.GetNestedTypes() |> Array.map (fun ty -> ty.FullName)
+
+typeof<Db>.GetMethod("Insert").GetParameters()
+let db = Db()
+
+db.GetType().UnderlyingSystemType.FullName
+
+type App = Db.App
+let app = Db.App()
+app.GetType().UnderlyingSystemType.FullName
+app.GetType().Assembly.Location
+
+//#r @"C:\Users\Peter\AppData\Local\Temp\tmp873F.dll"
+
+typeof<Db.Screen>
+typeof<Db>
+
+typeof<Db.Screen>
+typeof<Db>
+Db.GetMembers()
+typeof<string>.Get
+let app = Db.App(Icon = "/icon.png", Name = "MyApp", Uri = "/my/app")
+app.GetType().Assembly
+let ty = app.GetType().IsNested
+
+let db = Db()
+db.GetType().
+
+app.GetType().
+Db.Insert(app)
+//type Database = Db.Database
+
+typeof<Db.App>
+typeof<Db>
+
+let db = Db.Open()
+db.Insert()
+
+
+let conn = SqlConnection()
+
+//Database.Insert(conn)
+Db.Insert(conn)
+
+typeof<Db>
+
+let conn = Db.Open()
+typeof<Db.Database>.GetCustomAttributes(false)
+typeof<Db.Database>.GetMethod("Insert", [| typeof<SqlConnection> |]).GetCustomAttributes(false)
+
+Db.Database.Insert(conn)
+conn
+let app = Db.App(Icon = "/icon.png", Name = "MyApp", Uri = "/my/app")
+app.Insert(conn)
+
+app.AppId <- 48
+app.Icon <- "/icon.png/bar"
+app.Name <- sprintf "Name %d" (Random().Next(1000000))
+app.Uri<- "/my/app/1"
+
+
+#r @"..\packages\Dapper.1.13\lib\net40\Dapper.dll"
+open System.Globalization
+open System.Text.RegularExpressions
+
+open Dapper
+open Microsoft.FSharp.Linq.RuntimeHelpers.LeafExpressionConverter
+
+
 
 let app = Db.App()
 app.AppId <- 48
@@ -21,7 +90,6 @@ app.Icon <- "/icon.png/bar"
 app.Name <- sprintf "Name %d" (Random().Next(1000000))
 app.Uri<- "/my/app/1"
 
-let conn = Db.Open()
 
 
 app.Name <- sprintf "Name %d" (Random().Next(1000000))

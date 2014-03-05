@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
   <metadata>
     <id>MicroORMTypeProvider</id>
-    <version>0.1.0</version>
+    <version>0.1.4</version>
     <title>MicroORMTypeProvider</title>
     <authors>Peter Lisovin</authors>
     <owners>Peter Lisovin</owners>
@@ -10,9 +10,6 @@
     <description>Generative type provider that simplifies using micro-ORMs (e.g. Dapper, etc.) by generating types mapped to tables.</description>
     <tags>microorm micro orm type provider fsharp</tags>
     <projectUrl>https://github.com/lisovin/MicroORMTypeProvider</projectUrl>
-    <dependencies>
-        <dependency id="ILBuilder"/>
-    </dependencies>
   </metadata>
   <files>
     <file src="bin\Debug\MicroORMTypeProvider.dll" target="lib\net40" />

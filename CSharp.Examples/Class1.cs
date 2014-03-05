@@ -11,8 +11,8 @@ namespace CSharp.Examples
     {
         public void Test()
         {
-            var conn = Db.Open();
-            var myapp = new Db.app();
+            var ty = typeof(Db);
+            var myapp = new Db.App();
             myapp.AppId = 1;
         }
 

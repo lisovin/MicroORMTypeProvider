@@ -35,11 +35,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="IKVM.Reflection">
-      <HintPath>..\packages\ILBuilder.0.1.24\lib\net40\IKVM.Reflection.dll</HintPath>
+      <HintPath>..\packages\ILBuilder.0.1.27\lib\net40\IKVM.Reflection.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="ILBuilder">
-      <HintPath>..\packages\ILBuilder.0.1.24\lib\net40\ILBuilder.dll</HintPath>
+      <HintPath>..\packages\ILBuilder.0.1.27\lib\net40\ILBuilder.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
@@ -62,10 +62,12 @@
     <Compile Include="MsSqlServer.fs" />
     <Compile Include="MicroORMAssembly.fs" />
     <Compile Include="ProvidedTypes.fs" />
+    <Compile Include="DelegatingType.fs" />
     <Compile Include="MicroORMTypeProvider.fs" />
     <None Include="Sandbox.fsx" />
     <None Include="packages.config" />
     <None Include="Script.fsx" />
+    <None Include="MicroORMTypeProvider.nuspec" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>

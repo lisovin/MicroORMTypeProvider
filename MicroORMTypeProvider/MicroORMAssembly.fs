@@ -134,8 +134,8 @@ module internal MicroORMAssembly =
             do! IL.ldloc result
         }
 
-    let createAssembly(connectionString, propertyStyle) = 
-        let assemblyPath = Path.ChangeExtension(Path.GetTempFileName(), ".dll")
+    let createAssembly(typeName, connectionString, propertyStyle, assemblyPath) = 
+        //let assemblyPath = Path.ChangeExtension(Path.GetTempFileName(), ".dll")
         let db = MsSqlServer(connectionString)
         let tables = db.Tables
         //let insertMethod = typeof<Database>.GetMethod("Insert", [| typeof<string>; typeof<string[]>; typeof<obj[]>; typeof<SqlConnection> |])
@@ -143,83 +143,106 @@ module internal MicroORMAssembly =
         //printfn "--->updateMethod: %A" updateMethod
 
         assembly {
-            for t in tables do
-                let tableName = toTableName t.TableName
-                do! publicType tableName {
-                    let! cons = publicDefaultEmptyConstructor
-                    
-                    let keyColumnNames = ref []
-                    let keyValues = ref []
-                    let modColumnNames = ref []
-                    let modValues = ref []
-                    for c in t.Columns |> List.rev do
-                        let propType = fromDataType c.DataType c.IsNullable
-                        let columnName = toPropertyStyle propertyStyle c.ColumnName
-                        let! prop = publicAutoPropertyOfType (ClrType propType) columnName { get; set; }
-                        
-                        if c.IsPrimaryKeyPart 
-                        then keyColumnNames := c.ColumnName :: !keyColumnNames
-                             keyValues := prop :: !keyValues
-                        else modColumnNames := c.ColumnName :: !modColumnNames
-                             modValues := prop :: !modValues
-
-                    yield! publicMethodOfType ThisType "Insert" [ClrType typeof<SqlConnection>] {
-                        let sql = insertSql t.TableName (!modColumnNames |> Seq.toArray)
-
-                        let! scopeIdentity = IL.declareLocal<int>()
-                        do! emitExecuteSql sql !modColumnNames !modValues
-                        do! IL.stloc scopeIdentity
-                        
-                        do! IL.newobj cons
-                        // set values
-                        for (n,v) in (!modColumnNames, !modValues) ||> List.zip do
-                            do! IL.dup
-                            do! IL.ldarg_0
-                            do! IL.callvirt (v.GetGetMethod())   
-                            do! IL.callvirt (v.GetSetMethod())
-                        // set identity (assume first in the key)
-                        do! IL.dup
-                        do! IL.ldloc scopeIdentity
-                        let idProp = !keyValues |> List.head
-                        do! IL.unbox_any typeof<int32>
-                        do! IL.callvirt (idProp.GetSetMethod())
-
-                        do! IL.ret
-                    }
-
-                    yield! publicMethod<bool> "Update" [ClrType typeof<SqlConnection>] {
-                        let sql = updateSql t.TableName !keyColumnNames !modColumnNames
-                        let allColumnNames = (!keyColumnNames, !modColumnNames) ||> List.append
-                        let allValues = (!keyValues, !modValues) ||> List.append
-                        do! emitExecuteSql sql allColumnNames allValues
-                        do! IL.unbox_any typeof<int32>
-                        do! IL.ldc_i4_0
-                        
-                        do! (IL.ifThenElse IL.bne_un_s <| il {
-                            do! IL.ldc_bool false
-                        } <| il {
-                            do! IL.ldc_bool true
-                        })
-                        do! IL.ret
-                    }
-
-                    yield! publicMethod<bool> "Delete" [ClrType typeof<SqlConnection>] {
-                        let sql = deleteSql t.TableName (!keyColumnNames |> Seq.toArray)
-                        do! emitExecuteSql sql !keyColumnNames !keyValues
-                        do! IL.unbox_any typeof<int32>
-                        do! IL.ldc_i4_0
-                        
-                        do! (IL.ifThenElse IL.bne_un_s <| il {
-                            do! IL.ldc_bool false
-                        } <| il {
-                            do! IL.ldc_bool true
-                        })
-                        do! IL.ret
-                    }
+            do! IL.extensionsType typeName {
+                yield! IL.extensionMethod (ClrType typeof<int>) "Insert"  [ ClrType typeof<SqlConnection> ] {
+                    do! IL.ldc_i4_1
+                    do! IL.ret
                 }
+                (*
+                yield! publicStaticMethod<int> "Insert" [ ClrType typeof<float> ] {
+                    do! IL.ldc_i4_1
+                    do! IL.ret
+                }
+
+                yield! publicStaticMethod<int> "Insert" [ ClrType typeof<obj> ] {
+                    do! IL.ldc_i4_1
+                    do! IL.ret
+                }
+                *)
+                for t in tables do
+                    let tableName = toTableName t.TableName
+                    yield! IL.nestedPublicType tableName {
+                        let! cons = IL.publicDefaultEmptyConstructor
+                    
+                        let keyColumnNames = ref []
+                        let keyValues = ref []
+                        let modColumnNames = ref []
+                        let modValues = ref []
+                        for c in t.Columns |> List.rev do
+                            let propType = fromDataType c.DataType c.IsNullable
+                            let columnName = toPropertyStyle propertyStyle c.ColumnName
+                            let! prop = IL.publicAutoPropertyOfType (ClrType propType) columnName { get; set; }
+                        
+                            if c.IsPrimaryKeyPart 
+                            then keyColumnNames := c.ColumnName :: !keyColumnNames
+                                 keyValues := prop :: !keyValues
+                            else modColumnNames := c.ColumnName :: !modColumnNames
+                                 modValues := prop :: !modValues
+
+                        yield! IL.publicMethod<int> "GetId" [] {
+                            let idProp = !keyValues |> Seq.head
+                            do! IL.ldarg_0
+                            do! IL.callvirt (idProp.GetGetMethod())
+                            do! IL.ret
+                        }
+
+                        yield! IL.publicMethodOfType ThisType "Insert" [ClrType typeof<SqlConnection>] {
+                            let sql = insertSql t.TableName (!modColumnNames |> Seq.toArray)
+
+                            let! scopeIdentity = IL.declareLocal<int>()
+                            do! emitExecuteSql sql !modColumnNames !modValues
+                            do! IL.stloc scopeIdentity
+                        
+                            do! IL.newobj cons
+                            // set values
+                            for (n,v) in (!modColumnNames, !modValues) ||> List.zip do
+                                do! IL.dup
+                                do! IL.ldarg_0
+                                do! IL.callvirt (v.GetGetMethod())   
+                                do! IL.callvirt (v.GetSetMethod())
+                            // set identity (assume first in the key)
+                            do! IL.dup
+                            do! IL.ldloc scopeIdentity
+                            let idProp = !keyValues |> List.head
+                            do! IL.unbox_any typeof<int32>
+                            do! IL.callvirt (idProp.GetSetMethod())
+
+                            do! IL.ret
+                        }
+
+                        yield! IL.publicMethod<bool> "Update" [ClrType typeof<SqlConnection>] {
+                            let sql = updateSql t.TableName !keyColumnNames !modColumnNames
+                            let allColumnNames = (!keyColumnNames, !modColumnNames) ||> List.append
+                            let allValues = (!keyValues, !modValues) ||> List.append
+                            do! emitExecuteSql sql allColumnNames allValues
+                            do! IL.unbox_any typeof<int32>
+                            do! IL.ldc_i4_0
+                        
+                            do! (IL.ifThenElse IL.bne_un_s <| il {
+                                do! IL.ldc_bool false
+                            } <| il {
+                                do! IL.ldc_bool true
+                            })
+                            do! IL.ret
+                        }
+
+                        yield! IL.publicMethod<bool> "Delete" [ClrType typeof<SqlConnection>] {
+                            let sql = deleteSql t.TableName (!keyColumnNames |> Seq.toArray)
+                            do! emitExecuteSql sql !keyColumnNames !keyValues
+                            do! IL.unbox_any typeof<int32>
+                            do! IL.ldc_i4_0
+                        
+                            do! (IL.ifThenElse IL.bne_un_s <| il {
+                                do! IL.ldc_bool false
+                            } <| il {
+                                do! IL.ldc_bool true
+                            })
+                            do! IL.ret
+                        }
+                    }
+            }
+
         } |> saveAssembly assemblyPath
-        
-        assemblyPath
 
 
 
