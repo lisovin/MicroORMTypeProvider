@@ -210,77 +210,16 @@ module internal MicroORMAssembly =
                             do! IL.callvirt (idProp.GetGetMethod())
                             do! IL.ret
                         }
-                        
-                        let! entityInsert = IL.publicMethodOfType ThisType "Insert" [ClrType typeof<SqlConnection>] {
-                            let sql = insertSql t.TableName (!modColumnNames |> Seq.toArray)
-
-                            let! scopeIdentity = IL.declareLocal<int>()
-                            do! emitExecuteSql sql !modColumnNames !modValues
-                            do! IL.stloc scopeIdentity
-                        
-                            do! IL.newobj cons
-                            // set values
-                            for (n,v) in (!modColumnNames, !modValues) ||> List.zip do
-                                do! IL.dup
-                                do! IL.ldarg_0
-                                do! IL.callvirt (v.GetGetMethod())   
-                                do! IL.callvirt (v.GetSetMethod())
-                            // set identity (assume first in the key)
-                            do! IL.dup
-                            do! IL.ldloc scopeIdentity
-                            let idProp = !keyValues |> List.head
-                            do! IL.unbox_any typeof<int32>
-                            do! IL.callvirt (idProp.GetSetMethod())
-
-                            do! IL.ret
-                        }
-
-                        let! entityUpdate = IL.publicMethod<bool> "Update" [ClrType typeof<SqlConnection>] {
-                            let sql = updateSql t.TableName !keyColumnNames !modColumnNames
-                            let allColumnNames = (!keyColumnNames, !modColumnNames) ||> List.append
-                            let allValues = (!keyValues, !modValues) ||> List.append
-                            do! emitExecuteSql sql allColumnNames allValues
-                            do! IL.unbox_any typeof<int32>
-                            do! IL.ldc_i4_0
-                        
-                            do! (IL.ifThenElse IL.bne_un_s <| il {
-                                do! IL.ldc_bool false
-                            } <| il {
-                                do! IL.ldc_bool true
-                            })
-                            do! IL.ret
-                        }
-
-                        yield! IL.publicMethod<bool> "Delete" [ClrType typeof<SqlConnection>] {
-                            let sql = deleteSql t.TableName (!keyColumnNames |> Seq.toArray)
-                            do! emitExecuteSql sql !keyColumnNames !keyValues
-                            do! IL.unbox_any typeof<int32>
-                            do! IL.ldc_i4_0
-                        
-                            do! (IL.ifThenElse IL.bne_un_s <| il {
-                                do! IL.ldc_bool false
-                            } <| il {
-                                do! IL.ldc_bool true
-                            })
-                            do! IL.ret
-                        }
                         *)
                     }
 
                     let! entityInsert = IL.publicMethod(entityType, "Insert", entityType) {
                         let! scopeIdentity = IL.declareLocal<int>()
 
-                        do! IL.ldstr "--->Connection: {0}"
-                        do! IL.ldarg_0
-                        do! IL.ldfld connection
-                        do! IL.call Methods.System.Console.``WriteLine : string*obj -> unit`` 
-
                         let sql = insertSql t.TableName (!modColumnNames |> Seq.toArray)
                         do! emitExecuteSql sql !modColumnNames !modValues connection
                         do! IL.stloc scopeIdentity
                         
-                        do! IL.ilprintf "--->executed sql"
-
                         do! IL.newobj entityType
                         // set values
                         for (n,v) in (!modColumnNames, !modValues) ||> List.zip do
@@ -288,8 +227,6 @@ module internal MicroORMAssembly =
                             do! IL.ldarg_1
                             do! IL.callvirt (v.GetGetMethod())   
                             do! IL.callvirt (v.GetSetMethod())
-
-                        do! IL.ilprintf "--->fields are set"
 
                         // set identity (assume first in the key)
                         do! IL.dup
@@ -300,6 +237,37 @@ module internal MicroORMAssembly =
 
                         do! IL.ret
                     }
+
+                    let! entityUpdate = IL.publicMethod<bool>("Update", entityType) {
+                        let sql = updateSql t.TableName !keyColumnNames !modColumnNames
+                        let allColumnNames = (!keyColumnNames, !modColumnNames) ||> List.append
+                        let allValues = (!keyValues, !modValues) ||> List.append
+                        do! emitExecuteSql sql allColumnNames allValues connection
+                        do! IL.unbox_any typeof<int32>
+                        do! IL.ldc_i4_0
+                        
+                        do! (IL.ifThenElse IL.bne_un_s <| il {
+                            do! IL.ldc_bool false
+                        } <| il {
+                            do! IL.ldc_bool true
+                        })
+                        do! IL.ret
+                    }
+
+                    yield! IL.publicMethod<bool>("Delete", entityType) {
+                        let sql = deleteSql t.TableName (!keyColumnNames |> Seq.toArray)
+                        do! emitExecuteSql sql !keyColumnNames !keyValues connection
+                        do! IL.unbox_any typeof<int32>
+                        do! IL.ldc_i4_0
+                        
+                        do! (IL.ifThenElse IL.bne_un_s <| il {
+                            do! IL.ldc_bool false
+                        } <| il {
+                            do! IL.ldc_bool true
+                        })
+                        do! IL.ret
+                    }
+
                     entityTypes := (entityType, entityInsert) :: !entityTypes
 
                 yield! IL.publicMethod<obj>("Insert", typeof<obj>) {

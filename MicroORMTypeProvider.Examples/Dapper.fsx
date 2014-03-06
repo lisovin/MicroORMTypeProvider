@@ -13,11 +13,19 @@ type Db = MicroORM<connectionString>
 
 let db = Db.Connect()
 
+db.
 db.Connection
 
-let app = Db.App(Icon = "/icon.png", Name = "MyApp foo 123", Uri = "/my/app")
+let app = Db.App(Icon = "/icon.png", Name = "MyApp foo 1234", Uri = "/my/app")
 let o = app :> obj
 db.Insert(app)
+db.Insert(o)
+
+app.Icon <- "/icon56.png"
+app.AppId <- 56
+
+db.Update(app)
+db.Delete(app)
 
 let user = Db.User() :> obj
 db.Insert(user)
