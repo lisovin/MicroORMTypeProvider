@@ -87,12 +87,15 @@ module internal MicroORMAssembly =
         let where = keyColumnNames |> Seq.map (fun n -> sprintf "%s = @%s" n n) |> seqToString " and "
         sprintf "delete [%s] where %s; select @@rowcount" tableName where
 
-    let emitExecuteSql sql columnNames values = 
+    let emitExecuteSql sql columnNames values (connection : FieldBuilder) = 
         il {
             // let cmd = conn.CreateCommand()
             let! result = IL.declareLocal<int>()
             let! cmd = IL.declareLocal<System.Data.Common.DbCommand>()
-            do! IL.ldarg_1
+            
+            do! IL.ldarg_0
+            do! IL.ldfld connection
+
             do! IL.callvirt Methods.System.Data.SqlClient.SqlConnection.``CreateCommand : unit -> System.Data.Common.DbCommand``
             do! IL.stloc cmd
 
@@ -112,7 +115,7 @@ module internal MicroORMAssembly =
             for cn, v : IKVM.Reflection.Emit.PropertyBuilder in (columnNames, values) ||> List.zip do
                 do! IL.dup
                 do! IL.ldstr cn
-                do! IL.ldarg_0
+                do! IL.ldarg_1
                 do! IL.callvirt (v.GetGetMethod())
                 do! IL.box v.PropertyType
                 //do! IL.ldstr "foo"
@@ -143,50 +146,72 @@ module internal MicroORMAssembly =
         //printfn "--->updateMethod: %A" updateMethod
 
         assembly {
-            do! IL.extensionsType typeName {
-                yield! IL.extensionMethod (ClrType typeof<int>) "Insert"  [ ClrType typeof<SqlConnection> ] {
-                    do! IL.ldc_i4_1
-                    do! IL.ret
-                }
-                (*
-                yield! publicStaticMethod<int> "Insert" [ ClrType typeof<float> ] {
-                    do! IL.ldc_i4_1
+            yield! IL.publicType typeName {
+                let! connection = IL.privateField<SqlConnection>("connection")
+
+                //let! dbDefaultCons = IL.privateDefaultConstructor 
+
+                let! dbCons = IL.privateConstructor {
+                    do! IL.ldarg_0
+                    do! IL.callvirt Methods.System.Object.``new : unit -> obj``
+                    
+                    do! IL.ldarg_0
+                    do! IL.ldstr connectionString
+                    do! IL.newobj Methods.System.Data.SqlClient.SqlConnection.``new : string -> System.Data.SqlClient.SqlConnection``
+                    do! IL.stfld connection
+
+                    do! IL.ldarg_0
+                    do! IL.ldfld connection
+                    do! IL.callvirt Methods.System.Data.SqlClient.SqlConnection.``Open : unit -> unit``
+
                     do! IL.ret
                 }
 
-                yield! publicStaticMethod<int> "Insert" [ ClrType typeof<obj> ] {
-                    do! IL.ldc_i4_1
+                yield! IL.publicProperty "Connection" {
+                    yield! get {
+                        do! IL.ldarg_0
+                        do! IL.ldfld connection
+                        do! IL.ret
+                    }
+                }
+
+                let! thisType = IL.thisType
+                yield! IL.publicStaticMethod(thisType, "Connect") {
+                    do! IL.newobj dbCons
                     do! IL.ret
                 }
-                *)
+
+                let entityTypes = ref []
                 for t in tables do
                     let tableName = toTableName t.TableName
-                    yield! IL.nestedPublicType tableName {
-                        let! cons = IL.publicDefaultEmptyConstructor
+                    let keyColumnNames = ref []
+                    let keyValues = ref []
+                    let modColumnNames = ref []
+                    let modValues = ref []
+                    let crud = ref []
+
+                    let! entityType = IL.nestedPublicType tableName {
+                        let! cons = IL.publicDefaultConstructor
                     
-                        let keyColumnNames = ref []
-                        let keyValues = ref []
-                        let modColumnNames = ref []
-                        let modValues = ref []
                         for c in t.Columns |> List.rev do
                             let propType = fromDataType c.DataType c.IsNullable
                             let columnName = toPropertyStyle propertyStyle c.ColumnName
-                            let! prop = IL.publicAutoPropertyOfType (ClrType propType) columnName { get; set; }
+                            let! prop = IL.publicAutoProperty(propType, columnName) { get; set; }
                         
                             if c.IsPrimaryKeyPart 
                             then keyColumnNames := c.ColumnName :: !keyColumnNames
                                  keyValues := prop :: !keyValues
                             else modColumnNames := c.ColumnName :: !modColumnNames
                                  modValues := prop :: !modValues
-
+                        (*
                         yield! IL.publicMethod<int> "GetId" [] {
                             let idProp = !keyValues |> Seq.head
                             do! IL.ldarg_0
                             do! IL.callvirt (idProp.GetGetMethod())
                             do! IL.ret
                         }
-
-                        yield! IL.publicMethodOfType ThisType "Insert" [ClrType typeof<SqlConnection>] {
+                        
+                        let! entityInsert = IL.publicMethodOfType ThisType "Insert" [ClrType typeof<SqlConnection>] {
                             let sql = insertSql t.TableName (!modColumnNames |> Seq.toArray)
 
                             let! scopeIdentity = IL.declareLocal<int>()
@@ -210,7 +235,7 @@ module internal MicroORMAssembly =
                             do! IL.ret
                         }
 
-                        yield! IL.publicMethod<bool> "Update" [ClrType typeof<SqlConnection>] {
+                        let! entityUpdate = IL.publicMethod<bool> "Update" [ClrType typeof<SqlConnection>] {
                             let sql = updateSql t.TableName !keyColumnNames !modColumnNames
                             let allColumnNames = (!keyColumnNames, !modColumnNames) ||> List.append
                             let allValues = (!keyValues, !modValues) ||> List.append
@@ -239,9 +264,68 @@ module internal MicroORMAssembly =
                             })
                             do! IL.ret
                         }
+                        *)
                     }
-            }
 
+                    let! entityInsert = IL.publicMethod(entityType, "Insert", entityType) {
+                        let! scopeIdentity = IL.declareLocal<int>()
+
+                        do! IL.ldstr "--->Connection: {0}"
+                        do! IL.ldarg_0
+                        do! IL.ldfld connection
+                        do! IL.call Methods.System.Console.``WriteLine : string*obj -> unit`` 
+
+                        let sql = insertSql t.TableName (!modColumnNames |> Seq.toArray)
+                        do! emitExecuteSql sql !modColumnNames !modValues connection
+                        do! IL.stloc scopeIdentity
+                        
+                        do! IL.ilprintf "--->executed sql"
+
+                        do! IL.newobj entityType
+                        // set values
+                        for (n,v) in (!modColumnNames, !modValues) ||> List.zip do
+                            do! IL.dup
+                            do! IL.ldarg_1
+                            do! IL.callvirt (v.GetGetMethod())   
+                            do! IL.callvirt (v.GetSetMethod())
+
+                        do! IL.ilprintf "--->fields are set"
+
+                        // set identity (assume first in the key)
+                        do! IL.dup
+                        do! IL.ldloc scopeIdentity
+                        let idProp = !keyValues |> List.head
+                        do! IL.unbox_any typeof<int32>
+                        do! IL.callvirt (idProp.GetSetMethod())
+
+                        do! IL.ret
+                    }
+                    entityTypes := (entityType, entityInsert) :: !entityTypes
+
+                yield! IL.publicMethod<obj>("Insert", typeof<obj>) {
+                    do! IL.ldarg_1
+                    do! IL.callvirt Methods.System.Object.``GetType : unit -> System.Type``
+
+                    for (ty, i) in !entityTypes do
+                        let! typesNotEqual = IL.defineLabel
+                        do! IL.dup
+                        do! IL.ldtoken ty
+                        do! IL.call Methods.System.Type.``GetTypeFromHandle : System.RuntimeTypeHandle -> System.Type``
+                        do! IL.call Methods.System.Object.``ReferenceEquals : obj*obj -> bool``
+                        
+                        do! IL.brfalse_s typesNotEqual
+                        do! IL.ldarg_0
+                        do! IL.ldarg_1
+                        do! IL.unbox_any ty
+                        do! IL.callvirt i
+                        do! IL.ret
+
+                        do! IL.markLabel typesNotEqual
+                    
+                    do! IL.ldc_i4_0
+                    do! IL.ret
+                }
+            }
         } |> saveAssembly assemblyPath
 
 

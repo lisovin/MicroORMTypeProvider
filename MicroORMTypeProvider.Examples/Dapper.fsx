@@ -11,6 +11,25 @@ let [<Literal>] connectionString = @"Data Source=(localdb)\v11.0;Initial Catalog
 
 type Db = MicroORM<connectionString>
 
+let db = Db.Connect()
+
+db.Connection
+
+let app = Db.App(Icon = "/icon.png", Name = "MyApp foo 123", Uri = "/my/app")
+let o = app :> obj
+db.Insert(app)
+
+let user = Db.User() :> obj
+db.Insert(user)
+
+let til = Db.Tile() :> obj
+db.Insert(til)
+
+let screen = Db.Screen() :> obj
+db.Insert(screen)
+
+db.Insert(app :?> Db.App)
+
 typeof<Db>.FullName
 
 typeof<Db>.GetMethods() |> Array.map (fun mi -> mi.Name)
@@ -35,7 +54,11 @@ typeof<Db.Screen>
 typeof<Db>
 Db.GetMembers()
 typeof<string>.Get
-let app = Db.App(Icon = "/icon.png", Name = "MyApp", Uri = "/my/app")
+
+
+let app = Db.App(Icon = "/icon.png", Name = "MyApp foo", Uri = "/my/app")
+app.Insert
+db.Insert(app)
 app.GetType().Assembly
 let ty = app.GetType().IsNested
 
@@ -54,7 +77,7 @@ db.Insert()
 
 
 let conn = SqlConnection()
-
+conn.Ins
 //Database.Insert(conn)
 Db.Insert(conn)
 
