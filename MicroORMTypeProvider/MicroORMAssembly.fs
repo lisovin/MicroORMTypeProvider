@@ -146,7 +146,7 @@ module internal MicroORMAssembly =
         //printfn "--->updateMethod: %A" updateMethod
 
         assembly {
-            yield! IL.publicType typeName {
+            yield! IL.publicType (typeName, typeof<IDisposable>) {
                 let! connection = IL.privateField<SqlConnection>("connection")
 
                 //let! dbDefaultCons = IL.privateDefaultConstructor 
@@ -173,6 +173,12 @@ module internal MicroORMAssembly =
                         do! IL.ldfld connection
                         do! IL.ret
                     }
+                }
+
+                yield! IL.overrideMethod Methods.System.IDisposable.``Dispose : unit -> unit`` {
+                    do! IL.ldarg_0
+                    do! IL.ldfld connection
+                    do! IL.callvirt Methods.System.IDisposable.``Dispose : unit -> unit``
                 }
 
                 let! thisType = IL.thisType

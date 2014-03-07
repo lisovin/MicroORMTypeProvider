@@ -12,11 +12,16 @@ let [<Literal>] connectionString = @"Data Source=(localdb)\v11.0;Initial Catalog
 type Db = MicroORM<connectionString>
 
 let db = Db.Connect()
+let test () = 
+    use dd = db
+    let app = Db.App(Icon = "/icon.png", Name = sprintf "MyApp %d" (Random().Next(1000000)), Uri = "/my/app")
+    db.Insert app
+   
 
-db.
+test()
+
 db.Connection
 
-let app = Db.App(Icon = "/icon.png", Name = "MyApp foo 1234", Uri = "/my/app")
 let o = app :> obj
 db.Insert(app)
 db.Insert(o)
