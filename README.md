@@ -18,7 +18,9 @@ type Db = MicroORM<connectionString>
 let db = Db.Connect()
 
 let user = Db.User(Name = "John Doe", Age = 30)
-db.Insert(user)
+let user = db.Insert(user)
+
+printfn "--->assigned user id: %d" user.UserId
 
 user.Age <- 40
 db.Update(user)
