@@ -15,12 +15,14 @@ open MicroORMTypeProvider
 let [<Literal>] connectionString = @"Data Source=(localdb)\v11.0;Initial Catalog=test;Integrated Security=True"
 type Db = MicroORM<connectionString>
 
-let conn = Db.Open()
+let db = Db.Connect()
 
 let user = Db.User(Name = "John Doe", Age = 30)
-user.Insert(conn)
+db.Insert(user)
 
 user.Age <- 40
-use.Update(conn)
+db.Update(user)
 
-user.Delete(conn)
+db.Delete(user)
+
+db.Dispose()
