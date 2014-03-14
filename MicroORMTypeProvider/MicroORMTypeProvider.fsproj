@@ -65,6 +65,7 @@
     <None Include="Sandbox.fsx" />
     <None Include="packages.config" />
     <None Include="Script.fsx" />
+    <None Include="Disassemble.fsx" />
     <None Include="MicroORMTypeProvider.nuspec" />
   </ItemGroup>
   <PropertyGroup>

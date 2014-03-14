@@ -12,11 +12,28 @@ let [<Literal>] connectionString = @"Data Source=(localdb)\v11.0;Initial Catalog
 type Db = MicroORM<connectionString>
 
 let db = Db.Connect()
+(db :> IDisposable).Dispose()
+
+db.Connection
+
+let app = Db.App(Icon = "/icon.png", Name = sprintf "MyApp %d" (Random().Next(1000000)), Uri = "/my/app")
+let app = db.Insert app
+app.AppId
+
+let app = Db.App(Icon = "/icon.png", Name = sprintf "MyApp %d" (Random().Next(1000000)), Uri = "/my/app") :> obj
+let app = db.Insert app :?> Db.App
+app.AppId
+
+app.Icon <- "FOOBAR"
+let app = app :> obj
+db.Update(app)
+
+db.Delete(app)
 let test () = 
     use dd = db
     let app = Db.App(Icon = "/icon.png", Name = sprintf "MyApp %d" (Random().Next(1000000)), Uri = "/my/app")
-    db.Insert app
-   
+    let app = db.Insert app
+       
 
 test()
 

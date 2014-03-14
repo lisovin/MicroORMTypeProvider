@@ -30,10 +30,14 @@ select
     c.column_name, 
     c.is_nullable, 
     c.data_type, 
-    isnull(objectproperty(object_id(k.constraint_name), 'IsPrimaryKey'), 0) is_primary_key_part
+    isnull(objectproperty(object_id(k1.constraint_name), 'IsPrimaryKey'), 0) is_primary_key_part,
+	k2.table_name as referenced_table_name
 from information_schema.tables t
-inner join information_schema.columns c on t.TABLE_NAME = c.TABLE_NAME
-left join information_schema.key_column_usage k on k.table_name = t.table_name and k.column_name = c.column_name
+inner join information_schema.columns c on t.table_name = c.table_name
+left join information_schema.key_column_usage k1 on k1.table_name = t.table_name and k1.column_name = c.column_name
+left join information_schema.referential_constraints rc1 on rc1.constraint_name = k1.constraint_name
+left join information_schema.key_column_usage k2 on k2.constraint_name = rc1.unique_constraint_name
+order by t.table_name, c.column_name
     """
 
     member __.Tables

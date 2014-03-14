@@ -41,6 +41,7 @@ type MicroORMTypeProvider(cfg : TypeProviderConfig) =
             let connectionString : string = unbox staticArguments.[0]
             let propStyle = PropertyStyle.Pascal
             let assemblyFileName = Path.ChangeExtension(Path.GetTempFileName(), ".dll")
+            printfn "--->assembly: %s" assemblyFileName
             MicroORMAssembly.createAssembly(typeName, connectionString, propStyle, assemblyFileName)
             let generatedAssembly = Assembly.LoadFrom assemblyFileName
             generatedAssemblyBytes <- File.ReadAllBytes(assemblyFileName)

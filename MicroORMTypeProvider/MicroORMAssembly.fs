@@ -91,12 +91,12 @@ module internal MicroORMAssembly =
         il {
             // let cmd = conn.CreateCommand()
             let! result = IL.declareLocal<int>()
-            let! cmd = IL.declareLocal<System.Data.Common.DbCommand>()
+            let! cmd = IL.declareLocal<System.Data.SqlClient.SqlCommand>()
             
             do! IL.ldarg_0
             do! IL.ldfld connection
 
-            do! IL.callvirt Methods.System.Data.SqlClient.SqlConnection.``CreateCommand : unit -> System.Data.Common.DbCommand``
+            do! IL.callvirt Methods.System.Data.SqlClient.SqlConnection.``CreateCommand : unit -> System.Data.SqlClient.SqlCommand``
             do! IL.stloc cmd
 
             // .try {
@@ -104,14 +104,11 @@ module internal MicroORMAssembly =
             // cmd.CommandText <- "insert ...."
             do! IL.ldloc cmd
             do! IL.ldstr sql
-            //do! IL.dup
-            //do! IL.call Methods.System.Console.``Write : string -> unit``
-            do! IL.callvirt Methods.System.Data.Common.DbCommand.``set_CommandText : string -> unit``
+            do! IL.callvirt Methods.System.Data.SqlClient.SqlCommand.``set_CommandText : string -> unit``
 
             // cmd.Parameters
             do! IL.ldloc cmd
-            do! IL.callvirt Methods.System.Data.SqlClient.SqlCommand.``get_Parameters : unit -> System.Data.Common.DbParameterCollection``
-                        
+            do! IL.callvirt Methods.System.Data.SqlClient.SqlCommand.``get_Parameters : unit -> System.Data.SqlClient.SqlParameterCollection``
             for cn, v : IKVM.Reflection.Emit.PropertyBuilder in (columnNames, values) ||> List.zip do
                 do! IL.dup
                 do! IL.ldstr cn
@@ -120,12 +117,14 @@ module internal MicroORMAssembly =
                 do! IL.box v.PropertyType
                 //do! IL.ldstr "foo"
                 do! IL.callvirt Methods.System.Data.SqlClient.SqlParameterCollection.``AddWithValue : string*obj -> System.Data.SqlClient.SqlParameter``
+                
                 do! IL.pop
 
             do! IL.pop
 
             do! IL.ldloc cmd
-            do! IL.callvirt Methods.System.Data.Common.DbCommand.``ExecuteScalar : unit -> obj``
+            do! IL.callvirt Methods.System.Data.SqlClient.SqlCommand.``ExecuteScalar : unit -> obj``
+            do! IL.unbox_any typeof<int>
             do! IL.stloc result
             // } finally {
             do! IL.beginFinally
@@ -134,16 +133,38 @@ module internal MicroORMAssembly =
             //do! IL.en
             do! IL.endExceptionBlock
                         
-            do! IL.ldloc result
+            //do! IL.ldloc result
+        }
+
+    let emityEntityMethodCall entityTypes f = 
+        il {
+            do! IL.ldarg_1
+            do! IL.callvirt Methods.System.Object.``GetType : unit -> System.Type``
+
+            for (ty : IKVM.Reflection.Type, i, u, d) in entityTypes do
+                let! typesNotEqual = IL.defineLabel
+                do! IL.dup
+                do! IL.ldtoken ty
+                do! IL.call Methods.System.Type.``GetTypeFromHandle : System.RuntimeTypeHandle -> System.Type``
+                do! IL.call Methods.System.Object.``ReferenceEquals : obj*obj -> bool``
+                        
+                do! IL.brfalse_s typesNotEqual
+    
+                do! IL.pop // pop dup-d type - the result of GetType()
+                do! IL.ldarg_0
+                do! IL.ldarg_1
+                do! IL.unbox_any ty
+                let entityMethod : IKVM.Reflection.Emit.MethodBuilder = f (i, u, d)
+                do! IL.callvirt entityMethod
+                //do! IL.box typeof<obj>
+                do! IL.ret
+
+                do! IL.markLabel typesNotEqual
         }
 
     let createAssembly(typeName, connectionString, propertyStyle, assemblyPath) = 
-        //let assemblyPath = Path.ChangeExtension(Path.GetTempFileName(), ".dll")
         let db = MsSqlServer(connectionString)
         let tables = db.Tables
-        //let insertMethod = typeof<Database>.GetMethod("Insert", [| typeof<string>; typeof<string[]>; typeof<obj[]>; typeof<SqlConnection> |])
-        //let updateMethod = typeof<Database>.GetMethod("Update", [| typeof<string>; typeof<string[]>; typeof<obj[]>; typeof<string[]>; typeof<obj[]>; typeof<SqlConnection> |])
-        //printfn "--->updateMethod: %A" updateMethod
 
         assembly {
             yield! IL.publicType (typeName, typeof<IDisposable>) {
@@ -167,7 +188,7 @@ module internal MicroORMAssembly =
                     do! IL.ret
                 }
 
-                yield! IL.publicProperty "Connection" {
+                yield! IL.publicProperty<SqlConnection> "Connection" {
                     yield! get {
                         do! IL.ldarg_0
                         do! IL.ldfld connection
@@ -179,6 +200,7 @@ module internal MicroORMAssembly =
                     do! IL.ldarg_0
                     do! IL.ldfld connection
                     do! IL.callvirt Methods.System.IDisposable.``Dispose : unit -> unit``
+                    do! IL.ret
                 }
 
                 let! thisType = IL.thisType
@@ -220,11 +242,11 @@ module internal MicroORMAssembly =
                     }
 
                     let! entityInsert = IL.publicMethod(entityType, "Insert", entityType) {
-                        let! scopeIdentity = IL.declareLocal<int>()
+                        //let! scopeIdentity = IL.declareLocal<int>()
 
                         let sql = insertSql t.TableName (!modColumnNames |> Seq.toArray)
                         do! emitExecuteSql sql !modColumnNames !modValues connection
-                        do! IL.stloc scopeIdentity
+                        //do! IL.stloc scopeIdentity
                         
                         do! IL.newobj entityType
                         // set values
@@ -236,9 +258,9 @@ module internal MicroORMAssembly =
 
                         // set identity (assume first in the key)
                         do! IL.dup
-                        do! IL.ldloc scopeIdentity
+                        
+                        do! IL.ldloc_0 // loc.0 contains the result of sql exec (from emitExecuteSql)
                         let idProp = !keyValues |> List.head
-                        do! IL.unbox_any typeof<int32>
                         do! IL.callvirt (idProp.GetSetMethod())
 
                         do! IL.ret
@@ -249,7 +271,8 @@ module internal MicroORMAssembly =
                         let allColumnNames = (!keyColumnNames, !modColumnNames) ||> List.append
                         let allValues = (!keyValues, !modValues) ||> List.append
                         do! emitExecuteSql sql allColumnNames allValues connection
-                        do! IL.unbox_any typeof<int32>
+
+                        do! IL.ldloc_0 // loc.0 contains the result of sql exec (from emitExecuteSql)
                         do! IL.ldc_i4_0
                         
                         do! (IL.ifThenElse IL.bne_un_s <| il {
@@ -260,10 +283,11 @@ module internal MicroORMAssembly =
                         do! IL.ret
                     }
 
-                    yield! IL.publicMethod<bool>("Delete", entityType) {
+                    let! entityDelete = IL.publicMethod<bool>("Delete", entityType) {
                         let sql = deleteSql t.TableName (!keyColumnNames |> Seq.toArray)
                         do! emitExecuteSql sql !keyColumnNames !keyValues connection
-                        do! IL.unbox_any typeof<int32>
+
+                        do! IL.ldloc_0 // loc.0 contains the result of sql exec (from emitExecuteSql)
                         do! IL.ldc_i4_0
                         
                         do! (IL.ifThenElse IL.bne_un_s <| il {
@@ -274,29 +298,26 @@ module internal MicroORMAssembly =
                         do! IL.ret
                     }
 
-                    entityTypes := (entityType, entityInsert) :: !entityTypes
+                    entityTypes := (entityType, entityInsert, entityUpdate, entityDelete) :: !entityTypes
 
                 yield! IL.publicMethod<obj>("Insert", typeof<obj>) {
-                    do! IL.ldarg_1
-                    do! IL.callvirt Methods.System.Object.``GetType : unit -> System.Type``
+                    do! emityEntityMethodCall !entityTypes (fun (i, u, d) -> i)
+                    do! IL.pop // pop dup-d type - the result of GetType()
+                    do! IL.ldnull
+                    do! IL.ret
+                }
 
-                    for (ty, i) in !entityTypes do
-                        let! typesNotEqual = IL.defineLabel
-                        do! IL.dup
-                        do! IL.ldtoken ty
-                        do! IL.call Methods.System.Type.``GetTypeFromHandle : System.RuntimeTypeHandle -> System.Type``
-                        do! IL.call Methods.System.Object.``ReferenceEquals : obj*obj -> bool``
-                        
-                        do! IL.brfalse_s typesNotEqual
-                        do! IL.ldarg_0
-                        do! IL.ldarg_1
-                        do! IL.unbox_any ty
-                        do! IL.callvirt i
-                        do! IL.ret
+                yield! IL.publicMethod<bool>("Update", typeof<obj>) {
+                    do! emityEntityMethodCall !entityTypes (fun (i, u, d) -> u)
+                    do! IL.pop // pop dup-d type - the result of GetType()
+                    do! IL.ldc_bool false
+                    do! IL.ret
+                }
 
-                        do! IL.markLabel typesNotEqual
-                    
-                    do! IL.ldc_i4_0
+                yield! IL.publicMethod<bool>("Delete", typeof<obj>) {
+                    do! emityEntityMethodCall !entityTypes (fun (i, u, d) -> d)
+                    do! IL.pop // pop dup-d type - the result of GetType()
+                    do! IL.ldc_bool false
                     do! IL.ret
                 }
             }
