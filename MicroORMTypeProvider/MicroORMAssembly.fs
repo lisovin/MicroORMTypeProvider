@@ -13,6 +13,15 @@ open MicroORMTypeProvider.Databases
 
 open IKVM.Reflection.Emit
 
+type FooBar() = 
+    member val Test = "" with get, set
+
+    member x.Insert() = 
+        let v = if x.Test = null
+                then DBNull.Value :> obj
+                else x.Test :> obj
+        ()
+
 type PropertyStyle = 
 | AsIs = 0
 | Pascal = 1
@@ -115,7 +124,18 @@ module internal MicroORMAssembly =
                 do! IL.ldarg_1
                 do! IL.callvirt (v.GetGetMethod())
                 do! IL.box v.PropertyType
-                //do! IL.ldstr "foo"
+                //do! IL.castclass typeof<obj>
+                // compare with null
+                do! IL.dup
+                let! notNull = IL.defineLabel
+                do! IL.ldnull
+                do! IL.call Methods.System.Object.``ReferenceEquals : obj*obj -> bool``
+                do! IL.brfalse_s notNull
+                do! IL.pop
+                do! IL.ldnull
+                do! IL.ldfld (typeof<DBNull>.GetField("Value"))
+                //do! IL.box typeof<obj>
+                do! IL.markLabel notNull
                 do! IL.callvirt Methods.System.Data.SqlClient.SqlParameterCollection.``AddWithValue : string*obj -> System.Data.SqlClient.SqlParameter``
                 
                 do! IL.pop
@@ -160,6 +180,7 @@ module internal MicroORMAssembly =
                 do! IL.ret
 
                 do! IL.markLabel typesNotEqual
+            do! IL.pop // pop dup-d type - the result of GetType()
         }
 
     let createAssembly(typeName, connectionString, propertyStyle, assemblyPath) = 
@@ -302,21 +323,21 @@ module internal MicroORMAssembly =
 
                 yield! IL.publicMethod<obj>("Insert", typeof<obj>) {
                     do! emityEntityMethodCall !entityTypes (fun (i, u, d) -> i)
-                    do! IL.pop // pop dup-d type - the result of GetType()
+
                     do! IL.ldnull
                     do! IL.ret
                 }
 
                 yield! IL.publicMethod<bool>("Update", typeof<obj>) {
                     do! emityEntityMethodCall !entityTypes (fun (i, u, d) -> u)
-                    do! IL.pop // pop dup-d type - the result of GetType()
+                    
                     do! IL.ldc_bool false
                     do! IL.ret
                 }
 
                 yield! IL.publicMethod<bool>("Delete", typeof<obj>) {
                     do! emityEntityMethodCall !entityTypes (fun (i, u, d) -> d)
-                    do! IL.pop // pop dup-d type - the result of GetType()
+
                     do! IL.ldc_bool false
                     do! IL.ret
                 }

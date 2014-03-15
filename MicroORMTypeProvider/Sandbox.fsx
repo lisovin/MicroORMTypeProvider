@@ -1,7 +1,6 @@
 ﻿#r @"bin\Debug\IKVM.Reflection.dll"
 #r @"bin\Debug\ILBuilder.dll"
 #r @"bin\Debug\ReflectionTypeProvider.dll"
-#r @"bin\Debug\MicroORMTypeProvider.dll"
 #load "MsSqlServer.fs"
 #load "MicroORMAssembly.fs"
 
@@ -15,3 +14,7 @@ let [<Literal>] connectionString = @"Data Source=(localdb)\v11.0;Initial Catalog
 MicroORMAssembly.createAssembly("Db", connectionString, PropertyStyle.Pascal, assemblyFileName)
 
 printfn "--->assembly: %s" assemblyFileName
+
+let v = typeof<DBNull>.GetField("Value")
+let r = v.GetValue(null) :?> DBNull
+r = DBNull.Value

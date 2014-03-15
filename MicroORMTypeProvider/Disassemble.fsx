@@ -26,7 +26,8 @@ File.ReadAllText(@"C:\temp\test.il")
 dis assemblyFileName
 File.ReadAllText (Path.ChangeExtension(assemblyFileName, "il"))
 
-dis @"C:\Dev\Projects\MicroORMTypeProvider\MicroORMTypeProvider\bin\Debug\MicroORMTypeProvider.dll"
+dis @"c:\Dev\Projects\MicroORMTypeProvider\MicroORMTypeProvider\bin\Debug\MicroORMTypeProvider.dll"
+File.ReadAllText(@"bin\Debug\MicroORMTypeProvider.il")
 
 
 dis @"c:\Dev\Projects\ILBuilder\ILBuilder\bin\Debug\ILBuilder.dll"
